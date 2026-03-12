@@ -79,7 +79,8 @@ jobs:
           git config user.email "github-actions@github.com"
           git add .
           git commit -m "Update image to $IMAGE_TAG" || echo "No changes"
-          git push
+          git remote set-url origin https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/PisethMao/deploy-spring-with-argocd.git
+          git push https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/PisethMao/deploy-spring-with-argocd.git
       - name: Cleanup
         run: |
           rm -rf argocd-repo
