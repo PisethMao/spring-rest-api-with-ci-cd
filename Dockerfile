@@ -3,6 +3,7 @@ FROM eclipse-temurin:25-jdk-jammy AS build
 WORKDIR /app
 COPY . .
 # If Maven:
+RUN chmod +x mvnw
 RUN ./mvnw -DskipTests package
 # If Gradle:
 #RUN ./gradlew clean bootJar -x test

@@ -23,8 +23,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '25'
-      - name: Build Spring Boot application
-        run: mvn clean package -DskipTests
       - name: Show Image Information
         run: |
           echo "GitHub SHA: ${{ github.sha }}"
