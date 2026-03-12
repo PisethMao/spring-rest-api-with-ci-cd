@@ -1,0 +1,82 @@
+name: Spring Rest API CI/CD Kubernetes Cluster
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+env:
+  DOCKER_USERNAME: pisethmao
+  DOCKER_IMAGE_NAME: my-backed
+  IMAGE_TAG: ${{ github.sha }}
+  HELM_REPOSITORY: https://github.com/PisethMao/deploy-spring-with-argocd.git
+jobs:
+  ci-job:
+    runs-on: ubuntu-latest
+    environment: DOCKER_ENV
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Spring
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+      - name: Build Spring Boot application
+        run: mvn clean package -DskipTests
+      - name: Show Image Information
+        run: |
+          echo "GitHub SHA: ${{ github.sha }}"
+          echo "Docker Image: $DOCKER_USERNAME/$DOCKER_IMAGE_NAME"
+          echo "Image Tag: $IMAGE_TAG"
+      - name: Login to DockerHub
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+      - name: Push Docker Image
+        if: github.event_name == 'push'
+        run: |
+          docker push $DOCKER_USERNAME/$DOCKER_IMAGE_NAME:$IMAGE_TAG
+          docker push $DOCKER_USERNAME/$DOCKER_IMAGE_NAME:latest
+      - name: Logout From DockerHub
+        if: github.event_name == 'push'
+        run: docker logout
+  cd-job:
+    needs: ci-job
+    runs-on: ubuntu-latest
+    environment: HELM_ENV
+    steps:
+      - name: Install YQ
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+      - name: Add Commit SHA To ENV
+        run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+      - name: Clone ArgoCD Repository
+        run: |
+          git clone https://x-access-token:${{ secrets.GIT_TOKEN }}@github.com/PisethMao/deploy-project-with-argocd.git argocd-repo
+      - name: Update Helm Chart
+        run: |
+          cd argocd-repo/launchly-project
+          yq e '.image.repository = "'$DOCKER_USERNAME'/'$DOCKER_IMAGE_NAME'"' -i values.yaml
+          yq e '.image.tag = "'$IMAGE_TAG'"' -i values.yaml
+      - name: Commit and Push Changes
+        run: |
+          cd argocd-repo/launchly-project
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Update image to $IMAGE_TAG" || echo "No changes"
+          git push
